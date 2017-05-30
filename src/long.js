@@ -54,6 +54,7 @@ function Long(low, high, unsigned) {
  */
 Long.prototype.__isLong__;
 
+// 用来区分是否为自己定义的long型
 Object.defineProperty(Long.prototype, "__isLong__", {
     value: true,
     enumerable: false,
@@ -149,12 +150,13 @@ function fromNumber(value, unsigned) {
         if (value >= TWO_PWR_64_DBL)
             return MAX_UNSIGNED_VALUE;
     } else {
-        if (value <= -TWO_PWR_63_DBL)
+        if (value <= -TWO_PWR_63_DBL)// 2^63-1
             return MIN_VALUE;
-        if (value + 1 >= TWO_PWR_63_DBL)
+        if (value + 1 >= TWO_PWR_63_DBL)//2^63
             return MAX_VALUE;
     }
     if (value < 0)
+    //neg()函数推测为反转，即负值变正值
         return fromNumber(-value, unsigned).neg();
     return fromBits((value % TWO_PWR_32_DBL) | 0, (value / TWO_PWR_32_DBL) | 0, unsigned);
 }
@@ -211,12 +213,12 @@ function fromString(str, unsigned, radix) {
         throw Error('empty string');
     if (str === "NaN" || str === "Infinity" || str === "+Infinity" || str === "-Infinity")
         return ZERO;
-    if (typeof unsigned === 'number') { 
+    if (typeof unsigned === 'number') {
         // For goog.math.long compatibility
         radix = unsigned,
-        unsigned = false;
+            unsigned = false;
     } else {
-        unsigned = !! unsigned;
+        unsigned = !!unsigned;
     }
     radix = radix || 10;
     if (radix < 2 || 36 < radix)
@@ -226,6 +228,7 @@ function fromString(str, unsigned, radix) {
     if ((p = str.indexOf('-')) > 0)
         throw Error('interior hyphen');
     else if (p === 0) {
+        // 转为正值处理
         return fromString(str.substring(1), unsigned, radix).neg();
     }
 
@@ -233,6 +236,7 @@ function fromString(str, unsigned, radix) {
     // minimize the calls to the very expensive emulated div.
     var radixToPower = fromNumber(pow_dbl(radix, 8));
 
+    // 从最高位分8位处理一次，如果长度超过8位，则先处理高位，然后将高位直接乘以进制的8次方，再处理低后8位，循环到最后8位为止
     var result = ZERO;
     for (var i = 0; i < str.length; i += 8) {
         var size = Math.min(8, str.length - i),
@@ -393,7 +397,7 @@ Long.NEG_ONE = NEG_ONE;
  * @type {!Long}
  * @inner
  */
-var MAX_VALUE = fromBits(0xFFFFFFFF|0, 0x7FFFFFFF|0, false);
+var MAX_VALUE = fromBits(0xFFFFFFFF | 0, 0x7FFFFFFF | 0, false);
 
 /**
  * Maximum signed value.
@@ -405,7 +409,7 @@ Long.MAX_VALUE = MAX_VALUE;
  * @type {!Long}
  * @inner
  */
-var MAX_UNSIGNED_VALUE = fromBits(0xFFFFFFFF|0, 0xFFFFFFFF|0, true);
+var MAX_UNSIGNED_VALUE = fromBits(0xFFFFFFFF | 0, 0xFFFFFFFF | 0, true);
 
 /**
  * Maximum unsigned value.
@@ -417,7 +421,7 @@ Long.MAX_UNSIGNED_VALUE = MAX_UNSIGNED_VALUE;
  * @type {!Long}
  * @inner
  */
-var MIN_VALUE = fromBits(0, 0x80000000|0, false);
+var MIN_VALUE = fromBits(0, 0x80000000 | 0, false);
 
 /**
  * Minimum signed value.
@@ -436,6 +440,7 @@ var LongPrototype = Long.prototype;
  * @returns {number}
  */
 LongPrototype.toInt = function toInt() {
+    //负值>>>0会变为正值
     return this.unsigned ? this.low >>> 0 : this.low;
 };
 
@@ -462,7 +467,8 @@ LongPrototype.toString = function toString(radix) {
         throw RangeError('radix');
     if (this.isZero())
         return '0';
-    if (this.isNegative()) { // Unsigned Longs are never negative
+    //如果是负值,Unsigned型的Long值永远不会为负值
+    if (this.isNegative()) {
         if (this.eq(MIN_VALUE)) {
             // We need to change the Long value before it can be negated, so we remove
             // the bottom-most digit in this base and then recurse to do the rest.
@@ -474,6 +480,7 @@ LongPrototype.toString = function toString(radix) {
             return '-' + this.neg().toString(radix);
     }
 
+    //每次处理6位，处理方式与字符串转换过来是类似的，和数学中十进制转换为N进制方法相同——相除法
     // Do several (6) digits each time through the loop, so as to
     // minimize the calls to the very expensive emulated div.
     var radixToPower = fromNumber(pow_dbl(radix, 6), this.unsigned),
@@ -745,8 +752,7 @@ LongPrototype.add = function add(addend) {
     if (!isLong(addend))
         addend = fromValue(addend);
 
-    // Divide each number into 4 chunks of 16 bits, and then sum the chunks.
-
+    // 将每个数字分成4个16比特的块，然后将这些块加起来
     var a48 = this.high >>> 16;
     var a32 = this.high & 0xFFFF;
     var a16 = this.low >>> 16;
@@ -919,7 +925,7 @@ LongPrototype.divide = function divide(divisor) {
             return UONE;
         res = UZERO;
     }
-        
+
     // Repeat the following until the remainder is less than other:  find a
     // floating-point that approximates remainder / other *from below*, add this
     // into the result, and subtract it from the remainder.  It is critical that
@@ -936,8 +942,8 @@ LongPrototype.divide = function divide(divisor) {
         var log2 = Math.ceil(Math.log(approx) / Math.LN2),
             delta = (log2 <= 48) ? 1 : pow_dbl(2, log2 - 48),
 
-        // Decrease the approximation until it is smaller than the remainder.  Note
-        // that if it is too large, the product overflows and is negative.
+            // Decrease the approximation until it is smaller than the remainder.  Note
+            // that if it is too large, the product overflows and is negative.
             approxRes = fromNumber(approx),
             approxRem = approxRes.mul(divisor);
         while (approxRem.isNegative() || approxRem.gt(rem)) {
@@ -1129,7 +1135,7 @@ LongPrototype.toUnsigned = function toUnsigned() {
  * @param {boolean=} le Whether little or big endian, defaults to big endian
  * @returns {!Array.<number>} Byte representation
  */
-LongPrototype.toBytes = function(le) {
+LongPrototype.toBytes = function (le) {
     return le ? this.toBytesLE() : this.toBytesBE();
 }
 
@@ -1137,16 +1143,16 @@ LongPrototype.toBytes = function(le) {
  * Converts this Long to its little endian byte representation.
  * @returns {!Array.<number>} Little endian byte representation
  */
-LongPrototype.toBytesLE = function() {
+LongPrototype.toBytesLE = function () {
     var hi = this.high,
         lo = this.low;
     return [
-         lo         & 0xff,
-        (lo >>>  8) & 0xff,
+        lo & 0xff,
+        (lo >>> 8) & 0xff,
         (lo >>> 16) & 0xff,
         (lo >>> 24) & 0xff,
-         hi         & 0xff,
-        (hi >>>  8) & 0xff,
+        hi & 0xff,
+        (hi >>> 8) & 0xff,
         (hi >>> 16) & 0xff,
         (hi >>> 24) & 0xff
     ];
@@ -1156,17 +1162,17 @@ LongPrototype.toBytesLE = function() {
  * Converts this Long to its big endian byte representation.
  * @returns {!Array.<number>} Big endian byte representation
  */
-LongPrototype.toBytesBE = function() {
+LongPrototype.toBytesBE = function () {
     var hi = this.high,
         lo = this.low;
     return [
         (hi >>> 24) & 0xff,
         (hi >>> 16) & 0xff,
-        (hi >>>  8) & 0xff,
-         hi         & 0xff,
+        (hi >>> 8) & 0xff,
+        hi & 0xff,
         (lo >>> 24) & 0xff,
         (lo >>> 16) & 0xff,
-        (lo >>>  8) & 0xff,
-         lo         & 0xff        
+        (lo >>> 8) & 0xff,
+        lo & 0xff
     ];
 }
